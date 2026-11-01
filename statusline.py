@@ -101,6 +101,7 @@ def _format_agent_state(state: str) -> str:
         "idle": f"{D}◇ Idle{R}",
         "working": f"{FG_BLUE}◈ Working...{R}",
         "tool_use": f"{FG_YELLOW}⚒ Tool{R}",
+        "reviewing": f"{FG_YELLOW}⌕ Review{R}",
         "error": f"{FG_RED}⚠︎ Error{R}",
     }
     if state in state_map:

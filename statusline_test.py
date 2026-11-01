@@ -75,7 +75,9 @@ class TestStatusline(unittest.TestCase):
     def test_format_agent_state(self):
         self.assertEqual(strip_ansi(_format_agent_state("idle")), "◇ Idle")
         self.assertEqual(strip_ansi(_format_agent_state("working")), "◈ Working...")
-        self.assertEqual(strip_ansi(_format_agent_state("reviewing")), "Reviewing...")
+        self.assertEqual(strip_ansi(_format_agent_state("tool_use")), "⚒ Tool")
+        self.assertEqual(strip_ansi(_format_agent_state("reviewing")), "⌕ Review")
+        self.assertEqual(strip_ansi(_format_agent_state("error")), "⚠︎ Error")
         self.assertEqual(
             strip_ansi(_format_agent_state("custom_state")), "Custom State..."
         )
