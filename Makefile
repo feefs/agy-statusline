@@ -1,6 +1,8 @@
-DESTDIR ?= $(HOME)/.gemini/antigravity-cli/agy-statusline
+DESTDIR := $(HOME)/.gemini/antigravity-cli/agy-statusline
+VHS_IMAGE_NAME := ghcr.io/charmbracelet/vhs
 
-.PHONY: test install
+.PHONY: test install gif clean
+.IGNORE: clean
 
 test:
 	uv run --with coverage coverage run --source=statusline statusline_test.py
@@ -9,4 +11,14 @@ test:
 
 install:
 	mkdir -p $(DESTDIR)
-	cp statusline.py statusline_test.py statusline.sh $(DESTDIR)/
+	cp statusline.py statusline.sh $(DESTDIR)/
+
+gif:
+	docker run --rm \
+		--volume "$(CURDIR):/vhs" \
+		--env PYTHONDONTWRITEBYTECODE=1 \
+		$(VHS_IMAGE_NAME) vhs/statusline.tape
+
+clean:
+	docker image rm $(VHS_IMAGE_NAME)
+	rm -rf __pycache__ .coverage htmlcov
