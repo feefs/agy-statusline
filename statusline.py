@@ -45,28 +45,14 @@ def _align_line(left: str, right: str, total_width: int) -> str:
     """Aligns 'left' to the left margin and 'right' to the right margin."""
     v_left = _visible_width(left)
     v_right = _visible_width(right)
-    pad = total_width - v_left - v_right
-    if pad > 0:
-        return f"{left}{' ' * pad}{right}"
-    return f"{left} {right}"
+    pad = max(1, total_width - v_left - v_right)
+    return f"{left}{' ' * pad}{right}"
 
 
-def _format_usage_gauge(
-    pct: float,
-    bar_len: int = 10,
-    health_pct: float | None = None,
-) -> str:
+def _format_usage_gauge(pct: float, bar_len: int) -> str:
     """Renders a usage gauge using ● for full, ○ for half, and · for empty."""
     step = 100.0 / bar_len
     half_step = step / 2.0
-
-    check_pct = pct if health_pct is None else health_pct
-    if check_pct < 25.0:
-        color = FG_RED
-    elif check_pct < 50.0:
-        color = FG_YELLOW
-    else:
-        color = ""
 
     bar = []
     for i in range(bar_len):
@@ -78,10 +64,25 @@ def _format_usage_gauge(
         else:
             bar.append("·")
 
-    rendered = "".join(bar)
-    if color:
-        return f"{color}{rendered}{R}"
-    return rendered
+    return "".join(bar)
+
+
+def _color_context_gauge(gauge: str, used_pct: float) -> str:
+    """Colors a context gauge based on used percentage."""
+    if used_pct > 75.0:
+        return f"{FG_RED}{gauge}{R}"
+    if used_pct > 50.0:
+        return f"{FG_YELLOW}{gauge}{R}"
+    return gauge
+
+
+def _color_quota_gauge(gauge: str, rem_pct: float) -> str:
+    """Colors a quota gauge based on remaining percentage."""
+    if rem_pct < 25.0:
+        return f"{FG_RED}{gauge}{R}"
+    if rem_pct < 50.0:
+        return f"{FG_YELLOW}{gauge}{R}"
+    return gauge
 
 
 ### Line 1 (Top Left): [vim_mode] · agent_state · [cycle_mode] ###
@@ -102,13 +103,13 @@ def _format_agent_state(state: str) -> str:
         "tool_use": f"{FG_YELLOW}⚒ Tool{R}",
         "error": f"{FG_RED}⚠︎ Error{R}",
     }
-    return state_map.get(state, f"{D}{state.replace('_', ' ').title()}...{R}")
+    if state in state_map:
+        return state_map[state]
+    return f"{D}{state.replace('_', ' ').title()}...{R}"
 
 
-def _format_cycle_mode(cycle_mode: str | None) -> str:
+def _format_cycle_mode(cycle_mode: str) -> str:
     """Formats the cycle_mode badge, or empty string for default/unspecified."""
-    if not cycle_mode:
-        return ""
     mode_clean = cycle_mode.strip().lower()
     mode_colors = {
         "accept-edits": FG_GREEN,
@@ -120,7 +121,7 @@ def _format_cycle_mode(cycle_mode: str | None) -> str:
     return ""
 
 
-def _build_left_section(
+def _build_top_left_section(
     vim_badge: str,
     agent_state: str,
     cycle_mode_badge: str,
@@ -160,20 +161,32 @@ def _format_token_count(tokens: int) -> str:
     return str(tokens)
 
 
-def _format_context_metric(used_pct: float, total_tokens: int = 0) -> str:
+def _format_context_metric(used_pct: float, total_tokens: int) -> str:
     """Formats the context gauge, token count, and percentage string."""
-    remaining_pct = 100.0 - used_pct
-    bar = _format_usage_gauge(used_pct, bar_len=10, health_pct=remaining_pct)
+    bar = _color_context_gauge(_format_usage_gauge(used_pct, bar_len=10), used_pct)
     tokens_fmt = _format_token_count(total_tokens)
     pct_fmt = f"{used_pct:.1f}%"
     return f"{D}ctx{R} {NUM_COLOR}{tokens_fmt}{R} {bar} {NUM_COLOR}{pct_fmt}{R}"
 
 
-def _build_right_section(
+def _build_top_right_section(
     optional_metrics: list[str],
     context_metric: str,
+    max_width: int,
 ) -> str:
-    return DOT_SEP.join(optional_metrics + [context_metric])
+    # Prepend optional metrics right-to-left until the section reaches max_width
+    res = context_metric
+    used_width = _visible_width(res)
+    sep_width = _visible_width(DOT_SEP)
+
+    for metric in reversed(optional_metrics):
+        next_width = used_width + sep_width + _visible_width(metric)
+        if next_width > max_width:
+            break
+        res = f"{metric}{DOT_SEP}{res}"
+        used_width = next_width
+
+    return res
 
 
 ### Line 2 (Bottom Left): model ###
@@ -188,11 +201,13 @@ def _format_model_name(model_name: str) -> str:
 ### Line 2 (Bottom Right): quota ###
 
 
-def _format_quota_section(model_name: str, quota_data: Mapping[str, Any] | None) -> str:
+def _format_quota_section(
+    model_name: str,
+    quota_data: Mapping[str, Any],
+    max_width: int,
+) -> str:
     """Formats the quota section based on model pool (gemini or claude/gpt)."""
-    if not quota_data:
-        return ""
-
+    # Determine quota pool and bucket keys from the model name
     model_lower = model_name.lower()
     if "gemini" in model_lower:
         pool_label = "gemini"
@@ -210,27 +225,50 @@ def _format_quota_section(model_name: str, quota_data: Mapping[str, Any] | None)
     if not b_5h and not b_7d:
         return ""
 
+    # Collect active quota buckets (always 5h; 7d and argon 7d only if < 50%)
     rem_5h = float(b_5h.get("remaining_fraction", 0.0)) * 100.0
-    bar_5h = _format_usage_gauge(rem_5h, bar_len=5, health_pct=rem_5h)
-    res = f"{D}quota ({pool_label}) 5h{R} {bar_5h} {NUM_COLOR}{rem_5h:.1f}%{R}"
+    bar_5h = _color_quota_gauge(_format_usage_gauge(rem_5h, bar_len=5), rem_5h)
+    items = [(rem_5h, f"{D}5h{R} {bar_5h} {NUM_COLOR}{rem_5h:.1f}%{R}")]
 
     if b_7d:
         rem_7d = float(b_7d.get("remaining_fraction", 0.0)) * 100.0
         if rem_7d < 50.0:
-            bar_7d = _format_usage_gauge(rem_7d, bar_len=5, health_pct=rem_7d)
-            res += f" {D}7d{R} {bar_7d} {NUM_COLOR}{rem_7d:.1f}%{R}"
+            bar_7d = _color_quota_gauge(_format_usage_gauge(rem_7d, bar_len=5), rem_7d)
+            items.append((rem_7d, f"{D}7d{R} {bar_7d} {NUM_COLOR}{rem_7d:.1f}%{R}"))
 
     if "gemini 4 argon" in model_lower:
         b_argon = quota_data.get("gemini-argon-wtu-weekly")
         if b_argon:
             rem_argon = float(b_argon.get("remaining_fraction", 0.0)) * 100.0
             if rem_argon < 50.0:
-                bar_argon = _format_usage_gauge(
-                    rem_argon, bar_len=5, health_pct=rem_argon
+                bar_argon = _color_quota_gauge(
+                    _format_usage_gauge(rem_argon, bar_len=5), rem_argon
                 )
-                res += f" {D}argon 7d{R} {bar_argon} {NUM_COLOR}{rem_argon:.1f}%{R}"
+                items.append(
+                    (
+                        rem_argon,
+                        f"{D}argon 7d{R} {bar_argon} {NUM_COLOR}{rem_argon:.1f}%{R}",
+                    )
+                )
 
-    return res
+    # Iteratively remove the highest-percentage quota until the section fits
+    prefix = f"{D}quota ({pool_label}){R}"
+    used_width = _visible_width(prefix)
+    for _, text in items:
+        used_width += 1 + _visible_width(text)
+
+    while len(items) > 1 and used_width > max_width:
+        max_idx = 0
+        for i in range(1, len(items)):
+            if items[i][0] >= items[max_idx][0]:
+                max_idx = i
+        _, removed_text = items.pop(max_idx)
+        used_width -= 1 + _visible_width(removed_text)
+
+    parts = [prefix]
+    for _, text in items:
+        parts.append(text)
+    return " ".join(parts)
 
 
 ### Render Statusline ###
@@ -252,18 +290,25 @@ def render_statusline(data: Mapping[str, Any]) -> str:
         artifacts=data.get("artifact_count", 0),
     )
 
-    top_left = _build_left_section(
+    top_left = _build_top_left_section(
         vim_badge,
         _format_agent_state(data.get("agent_state", "idle")),
-        _format_cycle_mode(data.get("cycle_mode")),
+        _format_cycle_mode(data.get("cycle_mode") or ""),
     )
-    top_right = _build_right_section(
+    top_right_max_width = cols - _visible_width(top_left) - 1
+    top_right = _build_top_right_section(
         optional_metrics,
         _format_context_metric(used_pct, total_tokens),
+        max_width=top_right_max_width,
     )
 
     bottom_left = _format_model_name(model_name)
-    bottom_right = _format_quota_section(model_name, data.get("quota"))
+    bottom_right_max_width = cols - _visible_width(bottom_left) - 1
+    bottom_right = _format_quota_section(
+        model_name,
+        data.get("quota") or {},
+        max_width=bottom_right_max_width,
+    )
 
     line1 = _align_line(top_left, top_right, cols)
     line2 = _align_line(bottom_left, bottom_right, cols)
