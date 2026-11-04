@@ -18,4 +18,5 @@ Enter
 Sleep 200ms
 Show
 
-Sleep 14s
+# Record 4 frames at 3s each (demo.py sleeps longer on the last frame as a buffer)
+Sleep 12s

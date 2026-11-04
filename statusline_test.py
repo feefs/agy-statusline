@@ -26,12 +26,13 @@ def strip_ansi(s: str) -> str:
 
 
 class TestStatusline(unittest.TestCase):
-    """Direct in-memory unit tests ordered to match displayed statusline flow."""
+    """Unit tests for status line."""
 
-    # ── Utilities ──
+    ### Utilities ###
 
     def test_visible_width(self):
         self.assertEqual(_visible_width("\033[32m● READY\033[0m"), 7)
+        self.assertEqual(_visible_width("⚠︎ Error"), 7)
         self.assertEqual(_visible_width("ctx 3.5k ●○········ 16.5%"), 25)
         self.assertEqual(_visible_width("你好"), 4)
 
@@ -64,7 +65,7 @@ class TestStatusline(unittest.TestCase):
         self.assertIn("\033[33m", _color_quota_gauge("●●···", 40.0))
         self.assertIn("\033[31m", _color_quota_gauge("●····", 20.0))
 
-    # ── Line 1 (Top Left): [vim_mode] · agent_state · [cycle_mode] ──
+    ### Line 1 (Top Left): [vim_mode] · agent_state · [cycle_mode] ###
 
     def test_format_vim_mode(self):
         self.assertEqual(_format_vim_mode(""), "")
@@ -94,13 +95,11 @@ class TestStatusline(unittest.TestCase):
             strip_ansi(_build_top_left_section("", "◇ Idle", "")), "◇ Idle"
         )
         self.assertEqual(
-            strip_ansi(
-                _build_top_left_section("-- VISUAL --", "◈ Working...", "auto")
-            ),
+            strip_ansi(_build_top_left_section("-- VISUAL --", "◈ Working...", "auto")),
             "-- VISUAL -- · ◈ Working... · auto",
         )
 
-    # ── Line 1 (Top Right): [optional metrics] · context ──
+    ### Line 1 (Top Right): [optional_metrics] · context ###
 
     def test_format_optional_metrics(self):
         self.assertEqual(_format_optional_metrics(0, 0, 0), [])
@@ -119,9 +118,12 @@ class TestStatusline(unittest.TestCase):
         self.assertEqual(_format_token_count(10_500), "10.5k")
         self.assertEqual(_format_token_count(192_900), "192.9k")
         # 1,000,000+ (max 2 decimals)
-        self.assertEqual(_format_token_count(1_000_000), "1m")
-        self.assertEqual(_format_token_count(1_450_000), "1.45m")
-        self.assertEqual(_format_token_count(1_500_000), "1.5m")
+        self.assertEqual(_format_token_count(999_949), "999.9k")
+        self.assertEqual(_format_token_count(999_950), "1M")
+        self.assertEqual(_format_token_count(999_999), "1M")
+        self.assertEqual(_format_token_count(1_000_000), "1M")
+        self.assertEqual(_format_token_count(1_450_000), "1.45M")
+        self.assertEqual(_format_token_count(1_500_000), "1.5M")
 
     def test_format_context_metric(self):
         self.assertEqual(
@@ -157,7 +159,7 @@ class TestStatusline(unittest.TestCase):
             "ctx 3.5k ●○········ 16.5%",
         )
 
-    # ── Line 2 (Bottom Left): model ──
+    ### Line 2 (Bottom Left): model ###
 
     def test_format_model_name(self):
         self.assertEqual(_format_model_name(""), "")
@@ -166,7 +168,7 @@ class TestStatusline(unittest.TestCase):
             "Gemini 3.8 Flash (High)",
         )
 
-    # ── Line 2 (Bottom Right): quota ──
+    ### Line 2 (Bottom Right): quota ###
 
     def test_format_quota_section(self):
         # Unknown model or missing quota buckets return empty string
@@ -302,9 +304,9 @@ class TestStatusline(unittest.TestCase):
             "quota (gemini) 5h ○···· 15.0%",
         )
 
-    # ── Render Statusline ──
+    ### Render Status Line ###
 
-    def test_render_statusline_mockup_example(self):
+    def test_render_statusline_full_payload(self):
         payload = {
             "vim": {"mode": "VISUAL"},
             "agent_state": "working",
@@ -363,6 +365,28 @@ class TestStatusline(unittest.TestCase):
             lines[1],
             "Gemini 4 Argon (High)                             quota (gemini) 5h ●●●●○ 92.6% argon 7d ●●··· 43.4%",
         )
+
+    def test_render_statusline_null_fields(self):
+        payload = {
+            "vim": None,
+            "agent_state": None,
+            "cycle_mode": None,
+            "model": None,
+            "artifact_count": None,
+            "subagents": None,
+            "task_count": None,
+            "context_window": None,
+            "quota": None,
+            "terminal_width": None,
+        }
+        output = strip_ansi(render_statusline(payload))
+        lines = output.splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(
+            lines[0],
+            f"◇ Idle{' ' * 53}ctx 0 ·········· 0.0%",
+        )
+        self.assertEqual(lines[1], " " * 80)
 
     def test_render_statusline_narrow_terminal(self):
         payload = {

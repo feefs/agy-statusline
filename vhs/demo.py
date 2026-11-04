@@ -5,7 +5,8 @@ import time
 from statusline import render_statusline
 
 FRAMES = [
-    # 1. Hero frame: INSERT + working + accept-edits (green), subagents, yellow context (> 50%) and red Argon 7d quota (< 25%)
+    # Frame 1: Hero frame with INSERT mode, working state, accept-edits (green),
+    # subagents, yellow context (> 50%), and red Argon 7d quota (< 25%).
     {
         "vim": {"mode": "INSERT"},
         "agent_state": "working",
@@ -24,7 +25,8 @@ FRAMES = [
             "gemini-argon-wtu-weekly": {"remaining_fraction": 0.200},
         },
     },
-    # 2. Reviewing artifact in auto mode, artifacts & tasks, Claude Opus 5.5 with yellow 7d quota (< 50%)
+    # Frame 2: Reviewing state in auto mode, artifacts & tasks, and yellow
+    # 7d quota (< 50%).
     {
         "vim": {"mode": "NORMAL"},
         "agent_state": "reviewing",
@@ -42,7 +44,8 @@ FRAMES = [
             "3p-weekly": {"remaining_fraction": 0.350},
         },
     },
-    # 3. Tool execution in VISUAL + plan mode, artifacts only, red context (> 75%) and red quota (< 25%), Gemini 3.8 Flash
+    # Frame 3: Tool execution in VISUAL and plan mode, artifacts only,
+    # red context (> 75%), and red 5h quota (< 25%).
     {
         "vim": {"mode": "VISUAL"},
         "agent_state": "tool_use",
@@ -60,7 +63,8 @@ FRAMES = [
             "gemini-weekly": {"remaining_fraction": 0.850},
         },
     },
-    # 4. Minimal idle state (healthy quotas >= 50%, no optional metrics), Claude Sonnet 5.5
+    # Frame 4: Minimal idle state with healthy quotas (>= 50%) and no
+    # optional metrics.
     {
         "vim": {"mode": "NORMAL"},
         "agent_state": "idle",
@@ -82,20 +86,22 @@ FRAMES = [
 
 
 def main() -> None:
-    cols = shutil.get_terminal_size((100, 2)).columns
+    terminal_width = shutil.get_terminal_size((100, 2)).columns
     sys.stdout.write("\033[?25l")
     sys.stdout.flush()
 
     try:
         for i, state in enumerate(FRAMES):
-            payload = dict(state, terminal_width=cols)
+            payload = dict(state, terminal_width=terminal_width)
             rendered = render_statusline(payload).rstrip("\n")
             sys.stdout.write(f"\033[H\033[2J{rendered}")
             sys.stdout.flush()
+            # Sleep 3.0s per frame, with an extra buffer on the final frame so the
+            # script doesn't exit to the shell prompt before statusline.tape finishes.
             if i < len(FRAMES) - 1:
-                time.sleep(3.5)
+                time.sleep(3.0)
             else:
-                time.sleep(4.0)
+                time.sleep(3.5)
     finally:
         sys.stdout.write("\033[?25h")
         sys.stdout.flush()
