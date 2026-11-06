@@ -1,11 +1,11 @@
-name: Test
+name: CI
 
 on:
   push:
     branches: [master]
 
 jobs:
-  test:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -13,6 +13,12 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
+
+      - name: Lint
+        run: make lint
+
+      - name: Format
+        run: make format
 
       - name: Run tests
         run: make test

@@ -1,13 +1,22 @@
 DESTDIR := $(HOME)/.gemini/antigravity-cli/agy-statusline
 VHS_IMAGE_NAME := ghcr.io/charmbracelet/vhs
 
-.PHONY: test install gif clean
+.PHONY: hooks lint format test install gif clean
 .IGNORE: clean
 
+hooks:
+	@uv run pre-commit install
+
+lint: hooks
+	@uv run pre-commit run ruff-check --all-files --verbose
+
+format: hooks
+	@uv run pre-commit run ruff-format --all-files --verbose
+
 test:
-	uv run --with coverage coverage run --source=statusline statusline_test.py
-	uv run --with coverage coverage report -m
-	uv run --with coverage coverage html
+	uv run coverage run --source=statusline statusline_test.py
+	uv run coverage report -m
+	uv run coverage html
 
 install:
 	mkdir -p $(DESTDIR)

@@ -40,11 +40,4 @@ chmod +x ~/.gemini/antigravity-cli/agy-statusline/statusline.sh
 
 ## Development
 
-* **Running unit tests & coverage**: requires [`uv`](https://docs.astral.sh/uv/)
-  ```sh
-  make test
-  ```
-* **Generating demo GIF**: requires [Docker](https://www.docker.com/) to run [VHS](https://github.com/charmbracelet/vhs)
-  ```sh
-  make gif
-  ```
+Requires [`uv`](https://docs.astral.sh/uv/) and [Docker](https://www.docker.com/) to run [VHS](https://github.com/charmbracelet/vhs)
